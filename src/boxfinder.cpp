@@ -29,6 +29,7 @@ You should have received a copy of the GNU General Public License along with thi
 extern std::mutex debug_mutex;
 #endif
 
+extern std::atomic<int> ipcount;
 
 Result * BoxFinder::operator()() {
   status_ = RUNNING;
@@ -246,6 +247,7 @@ Result * BoxFinder::operator()() {
   /* solve */
   CPXXwriteprob(e.env, e.lp, "test.lp", "LP");
   cplex_status = CPXXmipopt (e.env, e.lp);
+  ipcount++;
   if (cplex_status != 0) {
     std::cerr << "Failed to optimize LP." << std::endl;
   }
