@@ -1,6 +1,6 @@
 /*
 
-k-PPM - An implementation of the k-PPM method for multi-objective optimisation
+boxsplit - an implementation of a multi-criteria optimisation algorithm of Klamroth and Dächert
 Copyright (C) 2017 William Pettersson <william.pettersson@gmail.com>
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
@@ -123,7 +123,7 @@ int main(int argc, char* argv[]) {
 
   if (va_map.count("help")) {
     // usage();
-    std::cout << "k-PPM at " << HASH << std::endl;
+    std::cout << "boxfinder at " << HASH << std::endl;
     std::cout << opt << std::endl;
     return(1);
   }
@@ -149,7 +149,6 @@ int main(int argc, char* argv[]) {
   clock_gettime(CLOCK_MONOTONIC, &start);
   startelapsed = start.tv_sec + start.tv_nsec/1e9;
 
-  std::cout << "Starting " << num_threads << " threads." << std::endl;
   JobServer server(num_threads);
 
 
@@ -234,17 +233,12 @@ int main(int argc, char* argv[]) {
       for(int i = 0; i < 3; ++i) {
         sets.emplace_back();
       }
-      std::cout << "Solution ";
-      for(int i = 0; i < 3; ++i) {
-        std::cout << sol[i] << " ";
-      }
       for(auto b: boxes) {
         // Line 30
         if (((p.objsen == MIN) && (! b->less_than_u(res->soln))) || 
             ((p.objsen == MAX) && (! b->greater_than_u(res->soln)))) {
           continue;
         }
-        std::cout << "\tis in box " << b->str() << std::endl;
         // line 31
         for(int i = 0; i < 3; ++i) {
           // Line 32

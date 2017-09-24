@@ -1,6 +1,6 @@
 /*
 
-boxsplit - an implementation of ...
+boxsplit - an implementation of a multi-criteria optimisation algorithm of Klamroth and Dächert
 Copyright (C) 2017 William Pettersson <william.pettersson@gmail.com>
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
@@ -219,6 +219,8 @@ Result * BoxFinder::operator()() {
   // Set new objective into something
   // obj = mdiff + rho*f_i - rho*u_i      MINIMIZE
   // obj = mdiff + rho*u_i - rho*f_i      MAXIMIZE
+  // Seeing as u_i and rho are constants (for this particular box) we ignore
+  // them in the objective.
   // Don't forget that CPLEX doesn't "set" the objective function, it just
   // changes objective coefficients by index. If we don't refer to all possible
   // variables, we might have other variables in our objective (from e.g. when

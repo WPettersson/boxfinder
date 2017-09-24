@@ -1,6 +1,6 @@
 /*
 
-k-PPM - An implementation of the k-PPM method for multi-objective optimisation
+boxsplit - an implementation of a multi-criteria optimisation algorithm of Klamroth and Dächert
 Copyright (C) 2017 William Pettersson <william.pettersson@gmail.com>
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
