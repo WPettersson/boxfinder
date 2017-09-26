@@ -57,6 +57,7 @@ class JobServer {
     std::vector<std::thread> workers;
     std::mutex queue_mutex;
     std::mutex server_mutex;
+    std::mutex result_mutex;
     std::condition_variable condition;
     std::condition_variable server_condition;
     bool stop;
@@ -79,7 +80,10 @@ inline JobServer::JobServer(size_t threads) : stop(false) {
               this->ready.pop();
             }
             Result * res = task();
-            results.push(res);
+            {
+              std::unique_lock<std::mutex> lk(result_mutex);
+              results.push(res);
+            }
             server_condition.notify_one();
             // Something finished running, which means any number of tasks may
             // now be ready.
@@ -151,10 +155,13 @@ inline void JobServer::q(Task * t) {
 inline Result * JobServer::wait() {
   Result * res = nullptr;
   while (res == nullptr && !stop) {
-    if (!results.empty()) {
-      res = results.front();
-      results.pop();
-      break;
+    {
+      std::unique_lock<std::mutex> lk(result_mutex);
+      if (!results.empty()) {
+        res = results.front();
+        results.pop();
+        break;
+      }
     }
     std::unique_lock<std::mutex> lock(server_mutex);
     server_condition.wait(lock);
