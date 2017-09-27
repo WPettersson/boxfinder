@@ -246,7 +246,6 @@ Result * BoxFinder::operator()() {
   // difference.
   CPXXchgobjsen(e.env, e.lp, CPX_MIN);
   /* solve */
-  CPXXwriteprob(e.env, e.lp, "test.lp", "LP");
   cplex_status = CPXXmipopt (e.env, e.lp);
   ipcount++;
   if (cplex_status != 0) {

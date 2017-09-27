@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
   int num_threads;
 
   po::variables_map va_map;
-  po::options_description opt("Options for aira");
+  po::options_description opt("Options for boxfinder");
   opt.add_options()
     ("help,h", "Show this help.")
     ("lp,p",
