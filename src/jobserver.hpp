@@ -38,22 +38,68 @@ freely, subject to the following restrictions:
 #include <thread>
 #include <vector>
 
+#include "box.hpp"
+#include "boxfinder.hpp"
+#include "result.hpp"
 #include "task.hpp"
 
-class Result;
+
+/**
+ * Key function for sorting boxes as per UpdateIndividualSubsets
+ * Let j,k \in \{1,2,3\} \setminus \{index\}
+ * Then we want box[q]->u[j] \leq box[q+1]->u[j]
+ * and          box[q]->u[k] \geq box[q+q]->u[k]
+ * If box[q]->u == box[q+1]->u, then :
+ *              box[q]->v[j] \leq box[q+1]->v[j] and
+ *              box[q]->v[k] \geq box[q+1]->v[k]
+ */
+bool box_sort(const Box &a, const Box &b, int index) {
+  int j, k;
+  if (index == 0) {
+    j = 1; k = 2;
+  } else if (index == 1) {
+    j = 0; k = 2;
+  } else {
+    j = 0; k = 1;
+  }
+
+  if ((a.u[0] == b.u[0]) && (a.u[1] == b.u[1]) && (a.u[2] == b.u[2])) {
+    if ((a.v[j] <= b.v[j]) && (a.v[k] >= b.v[k])) {
+      return true;
+    } else if ((b.v[j] <= a.v[j]) && (b.v[k] >= a.v[k])) {
+      return false;
+    } else {
+      // TODO Bad?
+      return false;
+    }
+  }
+  if ((a.u[j] <= b.u[j]) && (a.u[k] >= b.u[k])) {
+    return true;
+  } else if ((b.u[j] <= a.u[j]) && (b.u[k] >= a.u[k])) {
+    return false;
+  } else {
+    // TODO bad?
+    return false;
+  }
+  return false;
+}
+
 
 class JobServer {
   public:
-    explicit JobServer(size_t threads);
+    explicit JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std::string name_);
     ~JobServer();
 
-    void q(Task * t);
-    Result * wait();
+    void q(Box * b);
+    void wait();
+
+    std::list<CPXLONG *> getSolutions();
 
   private:
-    std::queue<std::function<Result*()> > ready;
-    std::queue<Result *> results;
-    std::vector<std::pair<std::function<bool()>, std::function<Result*()> > > waiting;
+    std::list<Box *> waiting;
+    // How many threads are actively doing things, rather than waiting
+    std::atomic<int> running;
+    std::list<CPXLONG *> solutions;
     std::vector<std::thread> workers;
     std::mutex queue_mutex;
     std::mutex server_mutex;
@@ -61,57 +107,137 @@ class JobServer {
     std::condition_variable condition;
     std::condition_variable server_condition;
     bool stop;
+    CPXLONG *utopia;
+    int objcnt;
+    Sense sense;
+    std::string name;
 
 };
 
-inline JobServer::JobServer(size_t threads) : stop(false) {
+inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std::string name_) : running(0),
+  queue_mutex(), server_mutex(), result_mutex(), stop(false), utopia(utopia_), objcnt(3), sense(sense_), name(name_) {
   for(size_t t = 0; t < threads; ++t) {
     workers.emplace_back(
-        [this] {
-          for (;;) {
-            std::function<Result *()> task;
-            {
-              std::unique_lock<std::mutex> lock(this->queue_mutex);
-              this->condition.wait(lock,
-                  [this]{ return this->stop || !this->ready.empty(); });
-              if (this->stop && this->ready.empty())
-                return;
-              task = std::move(this->ready.front());
-              this->ready.pop();
+      [this] {
+        for (;;) {
+          Box * nextBox;
+          {
+            std::unique_lock<std::mutex> lock(this->queue_mutex);
+            this->condition.wait(lock,
+                [this]{ return this->stop || !this->waiting.empty(); });
+            if (this->stop && this->waiting.empty()) {
+              return;
             }
-            Result * res = task();
-            {
-              std::unique_lock<std::mutex> lk(result_mutex);
-              results.push(res);
-            }
-            server_condition.notify_one();
-            // Something finished running, which means any number of tasks may
-            // now be ready.
-            int numNewTasks = 0;
-            {
-              std::unique_lock<std::mutex> lock(this->queue_mutex);
-              auto readyJobs = std::remove_if(waiting.begin(), waiting.end(),
-                  [this, &numNewTasks]
-                  (std::pair<std::function<bool()>, std::function<Result *()>> f)
-                  -> bool {
-                    if (f.first()) {
-                      this->ready.push(f.second);
-                      numNewTasks++;
-                      return true;
-                    }
-                  return false;
-                  });
-              waiting.erase(readyJobs, waiting.end());
-            }
-            // Wake up all waiting threads, so they look for new
-            // tasks.
-            while (numNewTasks > 0) {
-              this->condition.notify_one();
-              numNewTasks--;
+            running += 1;
+            nextBox = this->waiting.front();
+            this->waiting.pop_front();
+          }
+          BoxFinder finder(name, objcnt, sense, this, nextBox, utopia);
+          Result * res = finder();
+          {
+            std::unique_lock<std::mutex> lk(result_mutex);
+            if (res->soln[0] == res->soln[1] &&
+                res->soln[1] == res->soln[2] &&
+                res->soln[0] == -1) {
+              delete nextBox;
+            } else {
+              // Have solution!
+              auto sol = new CPXLONG[3];
+              for(int i = 0; i < 3; ++i) {
+                sol[i] = res->soln[i];
+              }
+              solutions.push_back(sol);
+              // First run GenerateNewBoxesVsplit
+              // Create the set containing the 3 sets S_i
+              std::vector<std::vector<Box *>> sets;
+              // Create the 3 sets S_i
+              for(int i = 0; i < 3; ++i) {
+                sets.emplace_back();
+              }
+              this->waiting.push_front(nextBox);
+              for(auto b: waiting) {
+                // Line 30
+                if (((sense == MIN) && (! b->less_than_u(res->soln))) ||
+                    ((sense == MAX) && (! b->greater_than_u(res->soln)))) {
+                  continue;
+                }
+                // line 31
+                for(int i = 0; i < 3; ++i) {
+                  // Line 32
+                  if (((sense == MIN) && (res->soln[i] >= b->v[i]) && (res->soln[i] > utopia[i])) ||
+                      ((sense == MAX) && (res->soln[i] <= b->v[i]) && (res->soln[i] < utopia[i]))) {
+                    // Line 33
+                    auto b_i = new Box(b);
+                    // Line 34
+                    b_i->u[i] = res->soln[i];
+                    // Line 35
+                    sets[i].push_back(b_i);
+                  }
+                }
+                // Line 36
+                // Delete a box we're iterating over. This is hard while iterating, so
+                // mark it as "to delete"
+                b->done = true;
+              }
+              // Rest of line 36. Now we remove all the completed boxes, in one go.
+              waiting.erase(std::remove_if(waiting.begin(), waiting.end(),
+                    [](Box * b){return b->done;}), waiting.end());
+              // TODO We need to delete[] the removed boxes to avoid leaking memory?
+
+              // Next step, UpdateIndividualSubsets
+              for(int i = 0; i < 3; ++i) {
+                if (sets[i].empty()) {
+                  continue;
+                }
+                int j, k;
+                if (i == 0) {
+                  j = 1; k = 2;
+                } else if (i == 1) {
+                  j = 0; k = 2;
+                } else {
+                  j = 0; k = 1;
+                }
+                // Lines 45 to 49. Also see box_sort function at start of this file
+                if (sense == MIN) {
+                  auto sort_fn = std::bind(box_sort, std::placeholders::_1, std::placeholders::_2, i);
+                  std::sort(sets[i].begin(), sets[i].end(), sort_fn);
+                } else {
+                  // Maximising, negate sort function with a lambda.
+                  auto sort_fn = std::bind(box_sort, std::placeholders::_1, std::placeholders::_2, i);
+                  std::sort(sets[i].begin(), sets[i].end(), [sort_fn](Box *a, Box *b) {return !sort_fn(a,b);});
+                }
+                // Line 50
+                if (sense == MIN) {
+                  sets[i].front()->v[j] = res->soln[j];
+                  sets[i].back()->v[k] = res->soln[k];
+                } else {
+                  sets[i].back()->v[j] = res->soln[j];
+                  sets[i].front()->v[k] = res->soln[k];
+                }
+                // Line 51
+                for(auto it = sets[i].begin() + 1; it != sets[i].end(); ++it) {
+                  // Line 52
+                  if (sense == MIN) {
+                    (*it)->v[j] = (*(it-1))->u[j];
+                    (*(it-1))->v[k] = (*it)->u[k];
+                  } else {
+                    (*(it-1))->v[j] = (*it)->u[j];
+                    (*it)->v[k] = (*(it-1))->u[k];
+                  }
+                }
+                // Line 54
+                for(auto newbox: sets[i]) {
+                  waiting.push_back(newbox);
+                  condition.notify_one();
+                }
+              }
             }
           }
+          running -= 1;
+          server_condition.notify_one();
         }
-        );
+      }
+    );
   }
 }
 
@@ -126,11 +252,7 @@ inline JobServer::~JobServer() {
   }
 }
 
-inline void JobServer::q(Task * t) {
-  auto task = std::make_shared< std::function<Result*()> >(
-          std::bind(&Task::operator(), t)
-      );
-  bool added = false;
+inline void JobServer::q(Box * b) {
   {
     std::unique_lock<std::mutex> lock(queue_mutex);
 
@@ -138,35 +260,19 @@ inline void JobServer::q(Task * t) {
     if (stop) {
         throw std::runtime_error("enqueue on stopped ThreadPool");
     }
-    if (t->isReady()) {
-      this->ready.emplace([task]() -> Result* { return (*task)(); });
-      added = true;
-    } else {
-      auto ready = std::make_shared< std::function<bool()> >(
-            std::bind(&Task::isReady, t) );
-      this->waiting.emplace_back([ready]() -> bool { return (*ready)(); }, [task]() -> Result*{ return (*task)(); });
-    }
+    this->waiting.push_back(b);
   }
-  if (added) {
-    condition.notify_one();
-  }
+  condition.notify_one();
 }
 
-inline Result * JobServer::wait() {
-  Result * res = nullptr;
-  while (res == nullptr && !stop) {
-    {
-      std::unique_lock<std::mutex> lk(result_mutex);
-      if (!results.empty()) {
-        res = results.front();
-        results.pop();
-        break;
-      }
-    }
-    std::unique_lock<std::mutex> lock(server_mutex);
-    server_condition.wait(lock);
-  }
-  return res;
+inline std::list<CPXLONG *> JobServer::getSolutions() {
+  return std::move(solutions);
+}
+
+inline void JobServer::wait() {
+  std::unique_lock<std::mutex> lk(server_mutex);
+  this->server_condition.wait(lk,
+      [this]{ return (running == 0) && this->waiting.empty(); });
 }
 
 #endif /* JOBSERVER_H */

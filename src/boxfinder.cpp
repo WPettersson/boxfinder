@@ -11,21 +11,20 @@ You should have received a copy of the GNU General Public License along with thi
 
 */
 
-#include <iostream>
-#include <list>
 #include <cmath>
-#include <mutex>
-#include <sstream>
 #include <string>
+#include <vector>
 
 #include <ilcplex/cplexx.h>
 
+#include "box.hpp"
 #include "boxfinder.hpp"
 #include "env.hpp"
 #include "problem.hpp"
 #include "result.hpp"
 
 #ifdef DEBUG
+#include <mutex>
 extern std::mutex debug_mutex;
 #endif
 

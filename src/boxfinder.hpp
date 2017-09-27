@@ -14,14 +14,17 @@ You should have received a copy of the GNU General Public License along with thi
 #ifndef BOXFINDER_HPP
 #define BOXFINDER_HPP
 
+#include <atomic>
 #include <mutex>
 #include <string>
 
-#include "box.hpp"
+#include <ilcplex/cplexx.h>
+
 #include "sense.hpp"
 #include "task.hpp"
-#include "jobserver.hpp"
 
+class JobServer;
+class Box;
 
 class BoxFinder: public Task {
   public:

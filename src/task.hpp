@@ -73,30 +73,6 @@ inline Status Task::status() const {
   return status_;
 }
 
-inline bool Task::isReady() const {
-#ifdef DEBUG_TASKSERVER
-  debug_mutex.lock();
-  std::cout << "Checking if " << *this << " is ready" << std::endl;
-  debug_mutex.unlock();
-#endif
-  for(auto task: preReqs_) {
-    if (task->status() != DONE) {
-#ifdef DEBUG_TASKSERVER
-      debug_mutex.lock();
-      std::cout << "Still waiting on " << *task << std::endl;
-      debug_mutex.unlock();
-#endif
-      return false;
-    }
-  }
-#ifdef DEBUG_TASKSERVER
-  debug_mutex.lock();
-  std::cout << *this << " is ready" << std::endl;
-  debug_mutex.unlock();
-#endif
-  return true;
-}
-
 inline int Task::objCount() const {
   return objCount_;
 }
