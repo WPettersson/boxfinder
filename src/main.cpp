@@ -50,8 +50,6 @@ int main(int argc, char* argv[]) {
 
   std::string pFilename, outputFilename;
 
-  int numSteps;
-  bool shareSolns;
   /* Timing */
   clock_t starttime, endtime;
   double cpu_time_used, elapsedtime, startelapsed;
@@ -70,12 +68,6 @@ int main(int argc, char* argv[]) {
     ("threads,t",
       po::value<int>(&num_threads)->default_value(1),
      "Number of threads to use internally. Optional, default to 1.")
-    ("steps,s",
-      po::value<int>(&numSteps)->default_value(1),
-     "Number of steps to take along each objective function when splitting up the search space. Optional, default to 1.")
-    ("share,r",
-     po::bool_switch(&shareSolns),
-     "Share solutions (and relaxations) across divisions of the solution space.")
   ;
 
   po::store(po::parse_command_line(argc, argv, opt), va_map);
