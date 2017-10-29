@@ -302,7 +302,7 @@ Result * BoxFinder::operator()() {
   for(int i = 0; i < 2; ++i) {
     std::cout << soln[i] << ", ";
   }
-  std::cout << soln[2] << "]" << std::endl;
+  std::cout << soln[2] << "] in " << box_->str() << std::endl;
   debug_mutex.unlock();
 #endif
 
