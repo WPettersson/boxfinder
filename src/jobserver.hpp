@@ -97,13 +97,13 @@ class JobServer {
 
   private:
     std::list<Box *> waiting;
+    std::list<Box *> runningBoxes;
     // How many threads are actively doing things, rather than waiting
     std::atomic<int> running;
     std::list<CPXLONG *> solutions;
     std::vector<std::thread> workers;
     std::mutex queue_mutex;
     std::mutex server_mutex;
-    std::mutex result_mutex;
     std::condition_variable condition;
     std::condition_variable server_condition;
     bool stop;
@@ -115,7 +115,7 @@ class JobServer {
 };
 
 inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std::string name_) : running(0),
-  queue_mutex(), server_mutex(), result_mutex(), stop(false), utopia(utopia_), objcnt(3), sense(sense_), name(name_) {
+  queue_mutex(), server_mutex(), stop(false), utopia(utopia_), objcnt(3), sense(sense_), name(name_) {
   for(size_t t = 0; t < threads; ++t) {
     workers.emplace_back(
       [this] {
@@ -131,14 +131,17 @@ inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std:
             running += 1;
             nextBox = this->waiting.front();
             this->waiting.pop_front();
+            this->runningBoxes.push_back(nextBox);
           }
           BoxFinder finder(name, objcnt, sense, this, nextBox, utopia);
           Result * res = finder();
           {
-            std::unique_lock<std::mutex> lk(result_mutex);
+            std::unique_lock<std::mutex> lock(this->queue_mutex);
             if (res->soln[0] == res->soln[1] &&
                 res->soln[1] == res->soln[2] &&
                 res->soln[0] == -1) {
+              this->runningBoxes.erase(std::remove(runningBoxes.begin(), runningBoxes.end(),
+                    nextBox), runningBoxes.end());
               delete nextBox;
             } else {
               // Have solution!
@@ -154,7 +157,11 @@ inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std:
               for(int i = 0; i < 3; ++i) {
                 sets.emplace_back();
               }
-              this->waiting.push_front(nextBox);
+              // We run the following loop over every box in waiting, and later
+              // over every box in runningBoxes. We need this, as we need to a
+              // certain level of consistency between the 'v' values of the
+              // boxes which could otherwise be broken if we remove multiple
+              // boxes and then split one of them.
               for(auto b: waiting) {
                 // Line 30
                 if (((sense == MIN) && (! b->less_than_u(res->soln))) ||
@@ -172,6 +179,40 @@ inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std:
                     b_i->u[i] = res->soln[i];
                     // Line 35
                     sets[i].push_back(b_i);
+#ifdef DEBUG
+                    debug_mutex.lock();
+                    std::cout << "Split in " << i << " to make " << b_i->str() << std::endl;
+                    debug_mutex.unlock();
+#endif
+                  }
+                }
+                // Line 36
+                // Delete a box we're iterating over. This is hard while iterating, so
+                // mark it as "to delete"
+                b->done = true;
+              }
+              for(auto b: runningBoxes) {
+                // Line 30
+                if (((sense == MIN) && (! b->less_than_u(res->soln))) ||
+                    ((sense == MAX) && (! b->greater_than_u(res->soln)))) {
+                  continue;
+                }
+                // line 31
+                for(int i = 0; i < 3; ++i) {
+                  // Line 32
+                  if (((sense == MIN) && (res->soln[i] >= b->v[i]) && (res->soln[i] > utopia[i])) ||
+                      ((sense == MAX) && (res->soln[i] <= b->v[i]) && (res->soln[i] < utopia[i]))) {
+                    // Line 33
+                    auto b_i = new Box(b);
+                    // Line 34
+                    b_i->u[i] = res->soln[i];
+                    // Line 35
+                    sets[i].push_back(b_i);
+#ifdef DEBUG
+                    debug_mutex.lock();
+                    std::cout << "Split in " << i << " to make " << b_i->str() << std::endl;
+                    debug_mutex.unlock();
+#endif
                   }
                 }
                 // Line 36
@@ -180,8 +221,12 @@ inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std:
                 b->done = true;
               }
               // Rest of line 36. Now we remove all the completed boxes, in one go.
-              waiting.erase(std::remove_if(waiting.begin(), waiting.end(),
-                    [](Box * b){return b->done;}), waiting.end());
+              runningBoxes.erase(std::remove_if(runningBoxes.begin(),
+                    runningBoxes.end(), [](Box * b){return b->done;}),
+                    runningBoxes.end());
+              waiting.erase(std::remove_if(waiting.begin(),
+                    waiting.end(), [](Box * b){return b->done;}),
+                    waiting.end());
               // TODO We need to delete[] the removed boxes to avoid leaking memory?
 
               // Next step, UpdateIndividualSubsets
@@ -189,6 +234,11 @@ inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std:
                 if (sets[i].empty()) {
                   continue;
                 }
+#ifdef DEBUG
+                debug_mutex.lock();
+                std::cout << "UpdateIndividualSubsets in " << i << " has " << sets[i].size() << " elements." << std::endl;
+                debug_mutex.unlock();
+#endif
                 int j, k;
                 if (i == 0) {
                   j = 1; k = 2;
