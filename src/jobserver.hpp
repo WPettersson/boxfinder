@@ -158,6 +158,8 @@ inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std:
               // certain level of consistency between the 'v' values of the
               // boxes which could otherwise be broken if we remove multiple
               // boxes and then split one of them.
+              //
+              std::list<Box *> toDelete;
               for(auto b: waiting) {
                 // Line 30
                 if (((sense == MIN) && (! b->less_than_u(res->soln))) ||
@@ -186,6 +188,7 @@ inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std:
                 // Delete a box we're iterating over. This is hard while iterating, so
                 // mark it as "to delete"
                 b->done = true;
+                toDelete.push_back(b);
               }
               for(auto b: runningBoxes) {
                 // Line 30
@@ -217,21 +220,18 @@ inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std:
                 b->done = true;
               }
               // Rest of line 36. Now we remove all the completed boxes, in one go.
-              auto newEnd = std::remove_if(waiting.begin(), waiting.end(),
-                  [](Box * b){return b->done;});
-              // First actually delete the boxes from memory
-              for(auto it = newEnd; it != waiting.end(); it++ ) {
-                delete (*it);
+              waiting.erase(std::remove_if(waiting.begin(), waiting.end(),
+                  [](Box * b){return b->done;}), waiting.end());
+              for(auto b: toDelete) {
+                delete b;
               }
-              // Then clear out the list of boxes
-              waiting.erase(newEnd, waiting.end());
 
               // Note that running boxes will always be deleted by the task
               // running them, so we don't need to call delete on them.
-              delete nextBox;
               runningBoxes.erase(std::remove_if(runningBoxes.begin(),
                     runningBoxes.end(), [](Box * b){return b->done;}),
                     runningBoxes.end());
+              delete nextBox;
 
               // Next step, UpdateIndividualSubsets
               for(int i = 0; i < 3; ++i) {

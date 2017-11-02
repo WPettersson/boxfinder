@@ -38,7 +38,7 @@ inline Result::Result(Box *box, CPXLONG soln_[]) :
 }
 
 inline Result::~Result() {
-  delete this->soln;
+  delete[] this->soln;
 }
 
 

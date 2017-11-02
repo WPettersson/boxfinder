@@ -14,6 +14,8 @@ You should have received a copy of the GNU General Public License along with thi
 #ifndef PROBLEM_H
 #define PROBLEM_H
 
+#include <ilcplex/cplexx.h>
+
 #include "sense.hpp"
 #include "env.hpp"
 
@@ -39,6 +41,7 @@ class Problem {
 
     Problem(const char* filename, Env& env);
     ~Problem();
+    void close(Env &e);
 
   private:
     int read_lp_problem(Env& e);
@@ -49,6 +52,10 @@ class Problem {
 
 inline const char * Problem::filename() {
   return filename_;
+}
+
+inline void Problem::close(Env &e) {
+  CPXXfreeprob(e.env, &e.lp);
 }
 
 inline Problem::~Problem() {

@@ -195,5 +195,7 @@ int main(int argc, char* argv[]) {
   outFile << ipcount << " IPs solved" << std::endl;
   outFile << std::setw(width) << std::setprecision(precision) << std::fixed;
   outFile << solCount << " Solutions found" << std::endl;
+  p.close(e);
+  CPXXcloseCPLEX(&e.env);
   return 0;
 }

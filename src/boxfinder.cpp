@@ -264,6 +264,8 @@ Result * BoxFinder::operator()() {
     std::cout << *this << " found infeasible" << std::endl;;
     debug_mutex.unlock();
 #endif
+    p.close(e);
+    CPXXcloseCPLEX(&e.env);
     return new Result(box_, soln);
   }
 
@@ -306,6 +308,8 @@ Result * BoxFinder::operator()() {
   debug_mutex.unlock();
 #endif
 
+  p.close(e);
+  CPXXcloseCPLEX(&e.env);
   status_ = DONE;
   auto * res = new Result(box_, soln);
   return res;
