@@ -93,14 +93,14 @@ class JobServer {
     void q(Box * b);
     void wait();
 
-    std::list<CPXLONG *> getSolutions();
+    std::list<Result *> getSolutions();
 
   private:
     std::list<Box *> waiting;
     std::list<Box *> runningBoxes;
     // How many threads are actively doing things, rather than waiting
     std::atomic<int> running;
-    std::list<CPXLONG *> solutions;
+    std::list<Result *> solutions;
     std::vector<std::thread> workers;
     std::mutex queue_mutex;
     std::mutex server_mutex;
@@ -143,13 +143,9 @@ inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std:
               this->runningBoxes.erase(std::remove(runningBoxes.begin(), runningBoxes.end(),
                     nextBox), runningBoxes.end());
               delete nextBox;
+              delete res;
             } else {
-              // Have solution!
-              auto sol = new CPXLONG[3];
-              for(int i = 0; i < 3; ++i) {
-                sol[i] = res->soln[i];
-              }
-              solutions.push_back(sol);
+              solutions.push_back(res);
               // First run GenerateNewBoxesVsplit
               // Create the set containing the 3 sets S_i
               std::vector<std::vector<Box *>> sets;
@@ -221,13 +217,21 @@ inline JobServer::JobServer(size_t threads, CPXLONG *utopia_, Sense sense_, std:
                 b->done = true;
               }
               // Rest of line 36. Now we remove all the completed boxes, in one go.
+              auto newEnd = std::remove_if(waiting.begin(), waiting.end(),
+                  [](Box * b){return b->done;});
+              // First actually delete the boxes from memory
+              for(auto it = newEnd; it != waiting.end(); it++ ) {
+                delete (*it);
+              }
+              // Then clear out the list of boxes
+              waiting.erase(newEnd, waiting.end());
+
+              // Note that running boxes will always be deleted by the task
+              // running them, so we don't need to call delete on them.
+              delete nextBox;
               runningBoxes.erase(std::remove_if(runningBoxes.begin(),
                     runningBoxes.end(), [](Box * b){return b->done;}),
                     runningBoxes.end());
-              waiting.erase(std::remove_if(waiting.begin(),
-                    waiting.end(), [](Box * b){return b->done;}),
-                    waiting.end());
-              // TODO We need to delete[] the removed boxes to avoid leaking memory?
 
               // Next step, UpdateIndividualSubsets
               for(int i = 0; i < 3; ++i) {
@@ -315,7 +319,7 @@ inline void JobServer::q(Box * b) {
   condition.notify_one();
 }
 
-inline std::list<CPXLONG *> JobServer::getSolutions() {
+inline std::list<Result *> JobServer::getSolutions() {
   return std::move(solutions);
 }
 

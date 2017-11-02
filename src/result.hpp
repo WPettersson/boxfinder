@@ -37,5 +37,9 @@ inline Result::Result(Box *box, CPXLONG soln_[]) :
   }
 }
 
+inline Result::~Result() {
+  delete this->soln;
+}
+
 
 #endif /* RESULT_HPP */

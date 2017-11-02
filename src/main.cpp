@@ -153,7 +153,7 @@ int main(int argc, char* argv[]) {
 
   server.q(firstBox);
   server.wait();
-  std::list<CPXLONG *> solutions = server.getSolutions();
+  std::list<Result *> solutions = server.getSolutions();
 
   /* Stop the clock. Sort and print results.*/
   endtime = clock();
@@ -161,15 +161,15 @@ int main(int argc, char* argv[]) {
   clock_gettime(CLOCK_MONOTONIC, &start);
   elapsedtime = (start.tv_sec + start.tv_nsec/1e9 - startelapsed);
   // Sort biggest to smallest
-  solutions.sort([] (CPXLONG *a, CPXLONG *b) -> bool {
-      if (a[0] == b[0]) {
-        return a[1] > b[1];
+  solutions.sort([] (Result *a, Result *b) -> bool {
+      if (a->soln[0] == b->soln[0]) {
+        return a->soln[1] > b->soln[1];
       }
-      return (a[0] > b[0]);
+      return (a->soln[0] > b->soln[0]);
       });
-  solutions.unique([] (CPXLONG *a, CPXLONG *b) -> bool {
+  solutions.unique([] (Result *a, Result *b) -> bool {
       for (int i = 0; i < 3; ++i) {
-        if (a[i] != b[i]) {
+        if (a->soln[i] != b->soln[i]) {
           return false;
         }
       }
@@ -179,10 +179,10 @@ int main(int argc, char* argv[]) {
   constexpr int precision = 3;
   outFile.open(outputFilename);
   outFile << std::endl << "Using BoxFinder at " << HASH << std::endl;
-  for(auto sol: solutions) {
-    outFile << sol[0];
+  for(auto r: solutions) {
+    outFile << r->soln[0];
     for(int i = 1; i < 3; ++i) {
-      outFile << "\t" << sol[i];
+      outFile << "\t" << r->soln[i];
     }
     outFile << std::endl;
   }
