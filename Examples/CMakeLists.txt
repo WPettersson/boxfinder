@@ -10,5 +10,5 @@ FOREACH(TESTFILE ${TESTS})
     "${PROJECT_SOURCE_DIR}/scripts/checkResults.sh"
     $<TARGET_FILE:boxsplit>
     "${TESTFILE}"
-    "-t 2 -s 2")
+    "-t 2")
 ENDFOREACH(TESTFILE)
